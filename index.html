@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>FloodWatch สตูล</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" href="icon-192.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <meta name="theme-color" content="#0ea5e9">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="FloodWatch">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #0f172a; }
+    iframe { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; }
+  </style>
+</head>
+<body>
+  <iframe id="app" allow="geolocation" title="FloodWatch"></iframe>
+  <script>
+    // ⚠️ อย่าลืมเปลี่ยน URL ตรงนี้เป็น URL /exec ของคุณ ⚠️
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbwi8qMaXG1G-uW9BSlkeR5jHkR66CSamNLGdguUHjALkwYDkWRH0VGRIrVaVu1eqW-edQ/exec';
+
+    const src = new URL(GAS_URL);
+    const q = new URLSearchParams(location.search);
+    const h = new URLSearchParams(location.hash.replace(/^#/, ''));
+    ['page', 'area', 'district'].forEach(k => {
+      const v = q.get(k) || h.get(k);
+      if (v) src.searchParams.set(k, v);
+    });
+    document.getElementById('app').src = src.toString();
+
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+  </script>
+</body>
+</html>
