@@ -11,17 +11,87 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="FloodWatch">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  
   <style>
-    html, body { margin: 0; height: 100%; overflow: hidden; background: #0f172a; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #0f172a; font-family: sans-serif; }
     iframe { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; }
+    
+    /* ⭐ CSS สำหรับแบนเนอร์ติดตั้งแอป */
+    #pwa-banner {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(150%);
+      width: 90%;
+      max-width: 400px;
+      background: rgba(15, 23, 42, 0.95);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(14, 165, 233, 0.4);
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.3, 1);
+    }
+    #pwa-banner.show {
+      transform: translateX(-50%) translateY(0);
+    }
+    .pwa-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      background: #fff;
+    }
+    .pwa-text {
+      flex: 1;
+      color: #e2e8f0;
+    }
+    .pwa-text h4 { margin: 0 0 4px 0; font-size: 15px; color: #7dd3fc; }
+    .pwa-text p { margin: 0; font-size: 11px; opacity: 0.8; line-height: 1.4; }
+    .pwa-btn {
+      background: #0ea5e9;
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: bold;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .pwa-btn:hover { background: #0284c7; }
+    .pwa-close {
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      font-size: 20px;
+      cursor: pointer;
+      padding: 0 4px;
+    }
   </style>
 </head>
 <body>
   <iframe id="app" allow="geolocation" title="FloodWatch"></iframe>
+
+  <!-- ⭐ แบนเนอร์ติดตั้งแอป -->
+  <div id="pwa-banner">
+    <img src="icon-192.png" alt="Icon" class="pwa-icon">
+    <div class="pwa-text">
+      <h4>ติดตั้ง FloodWatch เป็นแอป</h4>
+      <p>เปิดใช้งานได้เร็วขึ้น ไม่ต้องพิมพ์ URL</p>
+    </div>
+    <button id="pwa-install-btn" class="pwa-btn">ติดตั้ง</button>
+    <button id="pwa-close-btn" class="pwa-close">✕</button>
+  </div>
+
   <script>
-    // ⚠️ อย่าลืมเปลี่ยน URL ตรงนี้เป็น URL /exec ของคุณ ⚠️
+    // ⚠️ URL ของ Google Apps Script
     const GAS_URL = 'https://script.google.com/macros/s/AKfycbwi8qMaXG1G-uW9BSlkeR5jHkR66CSamNLGdguUHjALkwYDkWRH0VGRIrVaVu1eqW-edQ/exec';
 
+    // --- ส่วนที่ 1: การโหลด Iframe ---
     const src = new URL(GAS_URL);
     const q = new URLSearchParams(location.search);
     const h = new URLSearchParams(location.hash.replace(/^#/, ''));
@@ -32,6 +102,72 @@
     document.getElementById('app').src = src.toString();
 
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+
+    // --- ส่วนที่ 2: ระบบติดตั้ง PWA ---
+    let deferredPrompt;
+    const banner = document.getElementById('pwa-banner');
+    const installBtn = document.getElementById('pwa-install-btn');
+    const closeBtn = document.getElementById('pwa-close-btn');
+
+    // 1. เช็คว่าติดตั้งไปหรือยัง? (ถ้าติดตั้งแล้ว จะไม่แสดง)
+    function isInstalled() {
+      if (window.matchMedia('(display-mode: standalone)').matches) return true;
+      if (window.navigator.standalone === true) return true;
+      return false;
+    }
+
+    // 2. เช็คว่าเคยกดปิดไปหรือยัง? (ถ้าเพิ่งปิดไปไม่เกิน 7 วัน จะไม่กวน)
+    function isDismissed() {
+      const dismissedAt = localStorage.getItem('fw_pwa_dismissed');
+      if (!dismissedAt) return false;
+      const days = (Date.now() - Number(dismissedAt)) / (1000 * 60 * 60 * 24);
+      return days < 7; // 7 วัน
+    }
+
+    // 3. ตรวจจับแพลตฟอร์ม (iOS ต้องใช้วิธีบอกด้วยตัวเอง)
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
+    // 4. ดักจับเหตุการณ์เมื่อ Chrome อนุญาตให้ติดตั้ง
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      
+      // ถ้ายังไม่ติดตั้ง และไม่เคยปิด -> แสดงแบนเนอร์
+      if (!isInstalled() && !isDismissed()) {
+        banner.classList.add('show');
+      }
+    });
+
+    // 5. กรณีเป็น iOS (iPhone/iPad) จะไม่มี event ด้านบน เลยต้องเช็คเอง
+    if (isIOS && !isInstalled() && !isDismissed()) {
+      setTimeout(() => {
+        banner.classList.add('show');
+        installBtn.textContent = 'วิธีติดตั้ง';
+        installBtn.style.background = '#22c55e'; // เปลี่ยนสีปุ่มเป็นเขียว
+      }, 3000); // รอ 3 วิให้หน้าเว็บโหลดเสร็จก่อนค่อยโชว์
+    }
+
+    // 6. เมื่อผู้ใช้กดปุ่ม "ติดตั้ง"
+    installBtn.addEventListener('click', async () => {
+      if (isIOS) {
+        alert("วิธีติดตั้งบน iPhone:\n1. กดปุ่ม 'แชร์' (Share) ด้านล่างจอ\n2. เลือก 'เพิ่มไปที่หน้าจอหลัก' (Add to Home Screen)\n3. กด 'เพิ่ม'");
+        return;
+      }
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+          banner.classList.remove('show');
+        }
+        deferredPrompt = null;
+      }
+    });
+
+    // 7. เมื่อผู้ใช้กดปุ่มกากบาท (ปิด)
+    closeBtn.addEventListener('click', () => {
+      banner.classList.remove('show');
+      localStorage.setItem('fw_pwa_dismissed', Date.now()); // จำไว้ 7 วัน
+    });
   </script>
 </body>
 </html>
